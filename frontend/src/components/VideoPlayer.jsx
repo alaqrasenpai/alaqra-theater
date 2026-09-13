@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { getChannelForMovie } from '../data/channels';
+import { API_BASE, fetchEpisodes } from '../services/api';
 
 // Helper to parse WebVTT text into cue objects for custom overlay
 function parseVttCues(vttText) {
@@ -153,7 +154,7 @@ export default function VideoPlayer({
                 params.episode = epNum;
             }
 
-            const subApiUrl = `http://localhost:3001/api/subtitles/auto?${new URLSearchParams(params).toString()}`;
+            const subApiUrl = `${API_BASE}/api/subtitles/auto?${new URLSearchParams(params).toString()}`;
             setSubtitleUrl(subApiUrl);
 
             const res = await axios.get(subApiUrl);
@@ -210,7 +211,7 @@ export default function VideoPlayer({
             setError(null);
             clearInterval(pollIntervalRef.current);
 
-            const res = await axios.get('http://localhost:3001/api/torrent/start', {
+            const res = await axios.get(`${API_BASE}/api/torrent/start`, {
                 params: torrentParams
             });
             
@@ -220,7 +221,7 @@ export default function VideoPlayer({
             const hash = res.data.infoHash;
             pollIntervalRef.current = setInterval(async () => {
                 try {
-                    const statusRes = await axios.get(`http://localhost:3001/api/torrent/status/${hash}`);
+                    const statusRes = await axios.get(`${API_BASE}/api/torrent/status/${hash}`);
                     setTorrentStats({
                         speed: statusRes.data.downloadSpeed,
                         peers: statusRes.data.peers,
@@ -244,11 +245,10 @@ export default function VideoPlayer({
         if (!movie) return;
 
         if (movie.type === 'series' || movie.type === 'anime') {
-            const fetchEpisodes = async () => {
+            const loadEpisodes = async () => {
                 setLoadingEpisodes(true);
                 try {
-                    const res = await axios.get(`http://localhost:3001/api/search/series/${movie.id}/episodes`);
-                    const eps = res.data.episodes || [];
+                    const eps = await fetchEpisodes(movie.id);
                     setEpisodes(eps);
                     if (eps.length > 0) {
                         setSelectedSeason(eps[0].season);
@@ -260,13 +260,13 @@ export default function VideoPlayer({
                     setLoadingEpisodes(false);
                 }
             };
-            fetchEpisodes();
+            loadEpisodes();
         }
 
         if (movie.type === 'anime') {
             const fetchAnimeTorrents = async () => {
                 try {
-                    const res = await axios.get('http://localhost:3001/api/search/anime-torrents', {
+                    const res = await axios.get(`${API_BASE}/api/search/anime-torrents`, {
                         params: { title: movie.title }
                     });
                     const found = res.data.torrents || [];

@@ -9,6 +9,7 @@ import { CHANNELS } from './data/channels';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { translations } from './locales/translations';
 import { Film, Tv, Sparkles, Clock, AlertCircle, Layers, CheckCircle2 } from 'lucide-react';
+import { fetchMovies, fetchSeries, fetchAnime } from './services/api';
 
 function App() {
   const [items, setItems] = useState([]);
@@ -37,25 +38,21 @@ function App() {
       }
 
       if (tab === 'movies') {
-        const res = await axios.get('http://localhost:3001/api/search/movies', { params: { query } });
-        setItems(res.data.results || []);
+        const results = await fetchMovies(query);
+        setItems(results);
       } else if (tab === 'series') {
-        const res = await axios.get('http://localhost:3001/api/search/series', { params: { query } });
-        setItems(res.data.results || []);
+        const results = await fetchSeries(query);
+        setItems(results);
       } else if (tab === 'anime') {
-        const res = await axios.get('http://localhost:3001/api/search/anime', { params: { query } });
-        setItems(res.data.results || []);
+        const results = await fetchAnime(query);
+        setItems(results);
       } else {
         // 'all' or 'channels': fetch movies, series, and anime in parallel
-        const [moviesRes, seriesRes, animeRes] = await Promise.allSettled([
-          axios.get('http://localhost:3001/api/search/movies', { params: { query } }),
-          axios.get('http://localhost:3001/api/search/series', { params: { query } }),
-          axios.get('http://localhost:3001/api/search/anime', { params: { query } })
+        const [moviesList, seriesList, animeList] = await Promise.all([
+          fetchMovies(query),
+          fetchSeries(query),
+          fetchAnime(query)
         ]);
-
-        const moviesList = moviesRes.status === 'fulfilled' ? (moviesRes.value.data.results || []) : [];
-        const seriesList = seriesRes.status === 'fulfilled' ? (seriesRes.value.data.results || []) : [];
-        const animeList = animeRes.status === 'fulfilled' ? (animeRes.value.data.results || []) : [];
 
         // Mix evenly
         const combined = [];

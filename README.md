@@ -74,6 +74,20 @@ npm install
 
 ---
 
+## 🌐 النشر على Netlify (Deploy to Netlify)
+
+المشروع مُهيّأ بالكامل بملف `netlify.toml`:
+1. ادخل إلى حسابك في [Netlify](https://app.netlify.com/).
+2. اختر **Add new site** ثم **Import an existing project**.
+3. اختر مستودع **`alaqra-theater`** من حساب GitHub.
+4. سيتعرف Netlify تلقائياً على إعدادات `netlify.toml`:
+   - **Base directory**: `frontend`
+   - **Build command**: `npm run build`
+   - **Publish directory**: `dist`
+5. اضغط **Deploy alaqra-theater** وسيصبح موقعك متاحاً عالمياً فوراً!
+
+---
+
 ## 👨‍💻 المطور (Developer)
 
 تمت البرمجة والتطوير بواسطة **[alaqra.dev](https://alaqra.dev)**
