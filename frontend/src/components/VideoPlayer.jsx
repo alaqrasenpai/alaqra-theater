@@ -4,7 +4,7 @@ import {
     ArrowRight, ArrowLeft, Loader2, Subtitles, Upload, 
     ExternalLink, AlertCircle, PlayCircle, Film,
     Zap, Radio, Tv, Check, Globe, HelpCircle, Maximize2, Minimize2, RotateCcw,
-    CheckCircle2, Bell, Volume2, Settings, Sparkles, Info
+    CheckCircle2, Bell, Volume2, Settings, Sparkles, Info, ShieldCheck
 } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { getChannelForMovie } from '../data/channels';
@@ -358,6 +358,17 @@ export default function VideoPlayer({
             return `https://multiembed.mov/?video_id=${encodeURIComponent(movie.title)}${animeAmp}`;
         }
 
+        if (directServer === 4) {
+            // EmbedMaster - Fast Aggregator with Strict Ad Sandbox
+            if (isEpisodic && imdb) {
+                return `https://embedmaster.link/tv/${imdb}/${selectedSeason}/${selectedEpisode}`;
+            }
+            if (imdb) {
+                return `https://embedmaster.link/movie/${imdb}`;
+            }
+            return `https://embedmaster.link/movie/${encodeURIComponent(movie.title)}`;
+        }
+
         return `https://vidsrc.pm/embed/movie/${imdb || encodeURIComponent(movie.title)}${animeQuery}`;
     };
 
@@ -413,11 +424,17 @@ export default function VideoPlayer({
                     <div className="flex items-center gap-2 text-gray-300">
                         <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                         <span>
-                            {t?.activeServer || 'السيرفر المفعّل:'} <strong className="text-white">{directServer === 1 ? (t?.server1Name || 'سيرفر 1 (الأساسي)') : directServer === 2 ? (t?.server2Name || 'سيرفر 2') : (t?.server3Name || 'سيرفر 3')}</strong>
+                            {t?.activeServer || 'السيرفر المفعّل:'} <strong className="text-white">{directServer === 1 ? (t?.server1Name || 'سيرفر 1 (الأساسي)') : directServer === 2 ? (t?.server2Name || 'سيرفر 2') : directServer === 3 ? (t?.server3Name || 'سيرفر 3') : (t?.server4Name || 'سيرفر 4')}</strong>
                         </span>
+                        {directServer === 4 && (
+                            <span className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1">
+                                <ShieldCheck size={11} />
+                                <span>حظر الإعلانات مفعل</span>
+                            </span>
+                        )}
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-gray-400 text-[11px] ml-1">{t?.switchServer || 'تبديل السيرفر:'}</span>
                         <button
                             onClick={() => setDirectServer(1)}
@@ -443,6 +460,16 @@ export default function VideoPlayer({
                             }`}
                         >
                             {t?.server3Name || 'سيرفر 3'}
+                        </button>
+                        <button
+                            onClick={() => setDirectServer(4)}
+                            className={`px-3 py-1 rounded-xl font-bold transition flex items-center gap-1 ${
+                                directServer === 4 ? 'bg-emerald-600 text-white shadow' : 'bg-[#252525] text-gray-300 hover:bg-[#303030]'
+                            }`}
+                        >
+                            <ShieldCheck size={13} className="text-emerald-300" />
+                            <span>{t?.server4Name || 'سيرفر 4'}</span>
+                            {directServer === 4 && <Check size={12} />}
                         </button>
                     </div>
                 </div>
@@ -486,7 +513,7 @@ export default function VideoPlayer({
                                 {movie.title} {movie.type === 'series' && `• ${t?.season || 'الموسم'} ${selectedSeason} (${t?.episode || 'الحلقة'} ${selectedEpisode})`}
                             </span>
                             <span className="text-[11px] text-gray-300 font-medium">
-                                Alaqra YouTube Player • {directServer === 1 ? (t?.server1Name || 'سيرفر 1') : directServer === 2 ? (t?.server2Name || 'سيرفر 2') : (t?.server3Name || 'سيرفر 3')}
+                                Alaqra YouTube Player • {directServer === 1 ? (t?.server1Name || 'سيرفر 1') : directServer === 2 ? (t?.server2Name || 'سيرفر 2') : directServer === 3 ? (t?.server3Name || 'سيرفر 3') : (t?.server4Name || 'سيرفر 4')}
                             </span>
                         </div>
                     </div>
@@ -522,7 +549,9 @@ export default function VideoPlayer({
                             title={movie.title}
                             className="w-full h-full border-0"
                             allowFullScreen
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+                            referrerPolicy="no-referrer"
                         />
                     ) : (
                         loading ? (
