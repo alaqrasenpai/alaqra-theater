@@ -7,7 +7,6 @@ import {
     CheckCircle2, Bell, Volume2, Settings, Sparkles, Info, ShieldCheck
 } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { getChannelForMovie } from '../data/channels';
 import { API_BASE, fetchEpisodes } from '../services/api';
 
 // Helper to parse WebVTT text into cue objects for custom overlay
@@ -38,23 +37,10 @@ export default function VideoPlayer({
     onBack, 
     allMovies = [], 
     onPlayOtherMovie, 
-    onSelectChannel, 
     uiLang = 'ar', 
     t 
 }) {
     const isRtl = uiLang === 'ar';
-    const channel = getChannelForMovie(movie);
-    const channelName = channel ? (typeof channel.name === 'string' ? channel.name : (channel.name?.en || channel.name?.ar)) : '';
-    const [subscriptions, setSubscriptions] = useLocalStorage('alaqra_channel_subs', {});
-    const isSubscribed = channel ? !!subscriptions[channel.id] : false;
-
-    const toggleSubscribe = () => {
-        if (!channel) return;
-        setSubscriptions(prev => ({
-            ...prev,
-            [channel.id]: !prev[channel.id]
-        }));
-    };
 
     // Mode: Default is 'direct' with Server 1 (VidSrc PM - Fast, HD, and Working Arabic Subtitles on Screen)
     const [playMode, setPlayMode] = useState('direct');
@@ -194,13 +180,46 @@ export default function VideoPlayer({
         }
     };
 
-    // Fullscreen Toggle
+    // Fullscreen Toggle & Change Listeners
+    useEffect(() => {
+        const handleFsChange = () => {
+            setIsFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement));
+        };
+        document.addEventListener('fullscreenchange', handleFsChange);
+        document.addEventListener('webkitfullscreenchange', handleFsChange);
+        document.addEventListener('mozfullscreenchange', handleFsChange);
+        return () => {
+            document.removeEventListener('fullscreenchange', handleFsChange);
+            document.removeEventListener('webkitfullscreenchange', handleFsChange);
+            document.removeEventListener('mozfullscreenchange', handleFsChange);
+        };
+    }, []);
+
     const handleToggleFullscreen = () => {
-        if (!playerContainerRef.current) return;
-        if (!document.fullscreenElement) {
-            playerContainerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+        const elem = playerContainerRef.current;
+        if (!elem) return;
+
+        const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement);
+        if (!isFs) {
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen().catch(() => {});
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen();
+            } else if (elem.mozRequestFullScreen) {
+                elem.mozRequestFullScreen();
+            } else if (elem.msRequestFullscreen) {
+                elem.msRequestFullscreen();
+            }
         } else {
-            document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+            if (document.exitFullscreen) {
+                document.exitFullscreen().catch(() => {});
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.mozCancelFullScreen) {
+                document.mozCancelFullScreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
         }
     };
 
@@ -244,7 +263,7 @@ export default function VideoPlayer({
     useEffect(() => {
         if (!movie) return;
 
-        if (movie.type === 'series' || movie.type === 'anime') {
+        if (movie.type === 'series' || movie.type === 'anime' || movie.type === 'kdrama') {
             const loadEpisodes = async () => {
                 setLoadingEpisodes(true);
                 try {
@@ -321,7 +340,7 @@ export default function VideoPlayer({
     // Server 3: MultiEmbed - Multi-source fallback
     const getDirectStreamUrl = () => {
         const imdb = movie.imdbCode;
-        const isEpisodic = movie.type === 'series' || movie.type === 'anime';
+        const isEpisodic = movie.type === 'series' || movie.type === 'anime' || movie.type === 'kdrama';
         const isAnime = movie.type === 'anime';
         const animeQuery = isAnime ? '?dub=0&sub=1&audio=ja' : '';
         const animeAmp = isAnime ? '&dub=0&sub=1&audio=ja' : '';
@@ -511,7 +530,7 @@ export default function VideoPlayer({
                         </div>
                         <div className="flex flex-col">
                             <span className="text-white font-bold text-sm sm:text-base drop-shadow-md truncate max-w-md">
-                                {movie.title} {movie.type === 'series' && `• ${t?.season || 'الموسم'} ${selectedSeason} (${t?.episode || 'الحلقة'} ${selectedEpisode})`}
+                                {movie.title} {(movie.type === 'series' || movie.type === 'anime' || movie.type === 'kdrama') && `• ${t?.season || 'الموسم'} ${selectedSeason} (${t?.episode || 'الحلقة'} ${selectedEpisode})`}
                             </span>
                             <span className="text-[11px] text-gray-300 font-medium">
                                 Alaqra YouTube Player • {directServer === 1 ? (t?.server1Name || 'سيرفر 1') : directServer === 2 ? (t?.server2Name || 'سيرفر 2') : directServer === 3 ? (t?.server3Name || 'سيرفر 3') : (t?.server4Name || 'سيرفر 4')}
@@ -538,6 +557,14 @@ export default function VideoPlayer({
                                     : (t?.qualityDirectDesc || 'البث المباشر يعمل بجودة تلقائية تتكيف مع سرعتك. لتثبيت 1080p: اضغط ⚙️ في المشغل، أو بدّل لسيرفر 2 أو بث التورنت.')}
                             </p>
                         </div>
+                        {/* Fullscreen Button */}
+                        <button
+                            onClick={handleToggleFullscreen}
+                            className="p-1.5 sm:p-2 bg-black/75 hover:bg-red-600 border border-white/20 rounded-xl text-white transition shadow-lg flex items-center justify-center active:scale-95 shrink-0"
+                            title={isFullscreen ? (uiLang === 'ar' ? 'تصغير الشاشة' : 'Exit Fullscreen') : (uiLang === 'ar' ? 'ملء الشاشة' : 'Fullscreen')}
+                        >
+                            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                        </button>
                     </div>
                 </div>
 
@@ -549,8 +576,12 @@ export default function VideoPlayer({
                             src={getDirectStreamUrl()}
                             title={movie.title}
                             className="w-full h-full border-0"
-                            allowFullScreen
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                            allowFullScreen={true}
+                            allow="accelerometer *; autoplay *; clipboard-write *; encrypted-media *; gyroscope *; picture-in-picture *; fullscreen *"
+                            webkitallowfullscreen="true"
+                            mozallowfullscreen="true"
+                            oallowfullscreen="true"
+                            msallowfullscreen="true"
                         />
                     ) : (
                         loading ? (
@@ -612,7 +643,7 @@ export default function VideoPlayer({
                 </div>
             </div>
 
-            {/* YOUTUBE WATCH PAGE: Title, Channel Bar & Japanese Audio Pill */}
+            {/* Title & Japanese Audio Pill */}
             <div className="bg-[#181818] border border-[#272727] rounded-3xl p-5 flex flex-col gap-4 shadow-xl select-none">
                 {/* Video Title & Audio Mode Badge */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#262626] pb-4">
@@ -620,7 +651,7 @@ export default function VideoPlayer({
                         <h1 className="text-xl sm:text-2xl font-black text-white">
                             {movie.title}
                         </h1>
-                        {(movie.type === 'series' || movie.type === 'anime') && (
+                        {(movie.type === 'series' || movie.type === 'anime' || movie.type === 'kdrama') && (
                             <span className="text-xs text-red-400 font-semibold">
                                 {t?.season || 'الموسم'} {selectedSeason} • {t?.episode || 'الحلقة'} {selectedEpisode}
                             </span>
@@ -639,83 +670,35 @@ export default function VideoPlayer({
                     )}
                 </div>
 
-                {/* YouTube Channel Row: Avatar + Name + Subscribers + Subscribe Button */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5">
-                        {/* Channel Avatar */}
-                        <div 
-                            onClick={() => onSelectChannel && onSelectChannel(channel)}
-                            className={`w-12 h-12 rounded-full bg-gradient-to-tr ${channel.color} flex items-center justify-center text-xs font-black text-white shadow-lg cursor-pointer hover:scale-105 transition-transform ring-2 ring-white/10 shrink-0`}
-                        >
-                            {channel.avatarText}
-                        </div>
-
-                        {/* Channel Details */}
-                        <div className="flex flex-col">
-                            <div 
-                                onClick={() => onSelectChannel && onSelectChannel(channel)}
-                                className="flex items-center gap-1.5 cursor-pointer hover:underline"
-                            >
-                                <span className="font-bold text-white text-sm sm:text-base">
-                                    {channelName}
-                                </span>
-                                {channel.verified && (
-                                    <CheckCircle2 size={15} className="text-gray-400 fill-white" />
-                                )}
-                            </div>
-                            <span className="text-xs text-gray-400">
-                                {channel.subscribers} {t?.subscribers || 'مشترك'}
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* YouTube Subscribe Button */}
-                    <button
-                        onClick={toggleSubscribe}
-                        className={`flex items-center justify-center gap-2 px-5 py-2 rounded-full text-xs font-bold transition shadow-md self-start sm:self-center ${
-                            isSubscribed
-                                ? 'bg-[#2a2a2a] hover:bg-[#333333] text-gray-200'
-                                : 'bg-red-600 hover:bg-red-700 text-white shadow-red-900/40'
-                        }`}
-                    >
-                        {isSubscribed ? (
-                            <>
-                                <Bell size={14} className="fill-gray-200" />
-                                <span>{t?.subscribed || 'مشترك ✓'}</span>
-                            </>
-                        ) : (
-                            <span>{t?.subscribe || 'اشتراك'}</span>
-                        )}
-                    </button>
-                </div>
-
-                {/* More from this channel (Horizontal List) */}
+                {/* Recommended & Similar Titles (Horizontal List) */}
                 {allMovies && allMovies.length > 0 && (
                     <div className="mt-2 pt-3 border-t border-[#242424] flex flex-col gap-2.5">
-                        <span className="text-xs font-bold text-gray-400">
-                            {t?.moreFromChannel || 'المزيد من هذه القناة'}:
+                        <span className="text-xs font-bold text-gray-300 flex items-center gap-1.5">
+                            <Sparkles size={14} className="text-red-500" />
+                            {t?.recommendedTitles || (isRtl ? 'أعمال مقترحة ومشابهة' : 'Recommended & Similar Titles')}:
                         </span>
                         <div className="flex items-center gap-3 overflow-x-auto pb-2 no-scrollbar">
                             {allMovies
-                                .filter(m => m.id !== movie.id && getChannelForMovie(m)?.id === channel?.id)
-                                .slice(0, 10)
+                                .filter(m => m.id !== movie.id && (m.type === movie.type || !movie.type))
+                                .slice(0, 12)
                                 .map(relMovie => (
                                     <div
                                         key={relMovie.id}
                                         onClick={() => onPlayOtherMovie && onPlayOtherMovie(relMovie)}
-                                        className="flex items-center gap-2.5 bg-[#202020] hover:bg-[#2a2a2a] p-2 rounded-2xl cursor-pointer border border-[#2b2b2b] hover:border-red-500/50 transition-all shrink-0 w-56 group"
+                                        className="flex items-center gap-2.5 bg-[#18181a] hover:bg-[#222226] p-2 rounded-2xl cursor-pointer border border-white/10 hover:border-red-500/50 transition-all shrink-0 w-56 group"
                                     >
                                         <img 
                                             src={relMovie.poster} 
                                             alt={relMovie.title}
                                             className="w-10 h-14 object-cover rounded-xl shrink-0" 
+                                            loading="lazy"
                                         />
                                         <div className="flex flex-col overflow-hidden">
                                             <span className="text-xs font-bold text-white truncate group-hover:text-red-400">
                                                 {relMovie.title}
                                             </span>
                                             <span className="text-[10px] text-gray-400">
-                                                {relMovie.year} {relMovie.type === 'series' ? '• مسلسل' : relMovie.type === 'anime' ? '• أنمي' : '• فيلم'}
+                                                {relMovie.year} {relMovie.type === 'series' ? '• مسلسل' : relMovie.type === 'anime' ? '• أنمي' : relMovie.type === 'kdrama' ? '• كوري' : '• فيلم'}
                                             </span>
                                         </div>
                                     </div>
@@ -821,14 +804,14 @@ export default function VideoPlayer({
                 </div>
             </div>
 
-            {/* SERIES & ANIME EPISODES SECTION: Season & Episode Splitting */}
-            {(movie.type === 'series' || movie.type === 'anime') && (
+            {/* SERIES, ANIME & KDRAMA EPISODES SECTION: Season & Episode Splitting */}
+            {(movie.type === 'series' || movie.type === 'anime' || movie.type === 'kdrama') && (
                 <div className="bg-[#181818] border border-[#272727] rounded-3xl p-5 flex flex-col gap-4">
                     <div className="flex items-center justify-between border-b border-[#282828] pb-3">
                         <div className="flex items-center gap-2">
-                            {movie.type === 'anime' ? <Film size={20} className="text-purple-400" /> : <Tv size={20} className="text-emerald-400" />}
+                            {movie.type === 'anime' ? <Film size={20} className="text-purple-400" /> : movie.type === 'kdrama' ? <Sparkles size={20} className="text-pink-400" /> : <Tv size={20} className="text-emerald-400" />}
                             <h3 className="text-base font-bold text-white">
-                                {movie.type === 'anime' ? (t?.animeEpisodesAndSeasons || 'قائمة حلقات ومواسم الأنمي:') : (t?.episodesAndSeasons || 'قائمة الحلقات والمواسم:')}
+                                {movie.type === 'anime' ? (t?.animeEpisodesAndSeasons || 'قائمة حلقات ومواسم الأنمي:') : movie.type === 'kdrama' ? (t?.kdramaEpisodesAndSeasons || 'قائمة حلقات ومواسم الدراما الكورية:') : (t?.episodesAndSeasons || 'قائمة الحلقات والمواسم:')}
                             </h3>
                         </div>
                         <span className="text-xs text-gray-400">

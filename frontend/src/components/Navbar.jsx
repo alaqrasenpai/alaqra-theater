@@ -148,10 +148,11 @@ export default function Navbar({ onSearch, activeTab, setActiveTab, uiLang, setU
                                                     <div className="flex items-center gap-2 text-[10px] text-gray-400 mt-0.5">
                                                         <span className={`px-1.5 py-0.2 rounded font-semibold ${
                                                             item.type === 'anime' ? 'bg-purple-900/40 text-purple-300 border border-purple-500/20' :
+                                                            item.type === 'kdrama' ? 'bg-pink-900/40 text-pink-300 border border-pink-500/20' :
                                                             item.type === 'series' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-500/20' :
                                                             'bg-blue-900/40 text-blue-300 border border-blue-500/20'
                                                         }`}>
-                                                            {item.type === 'anime' ? (t.animeBadge || 'أنمي') : item.type === 'series' ? (t.seriesBadge || 'مسلسل') : (t.movieBadge || 'فيلم')}
+                                                            {item.type === 'anime' ? (t.animeBadge || 'أنمي') : item.type === 'kdrama' ? (t.kdramaBadge || 'دراما كورية') : item.type === 'series' ? (t.seriesBadge || 'مسلسل') : (t.movieBadge || 'فيلم')}
                                                         </span>
                                                         <span>{item.year}</span>
                                                         {item.rating && item.rating !== 'N/A' && (
@@ -262,10 +263,11 @@ export default function Navbar({ onSearch, activeTab, setActiveTab, uiLang, setU
                                                     <div className="flex items-center gap-2 text-[11px] text-gray-400 mt-1">
                                                         <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
                                                             item.type === 'anime' ? 'bg-purple-900/40 text-purple-300 border border-purple-500/30' :
+                                                            item.type === 'kdrama' ? 'bg-pink-900/40 text-pink-300 border border-pink-500/30' :
                                                             item.type === 'series' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-500/30' :
                                                             'bg-blue-900/40 text-blue-300 border border-blue-500/30'
                                                         }`}>
-                                                            {item.type === 'anime' ? (t.animeBadge || 'أنمي') : item.type === 'series' ? (t.seriesBadge || 'مسلسل') : (t.movieBadge || 'فيلم')}
+                                                            {item.type === 'anime' ? (t.animeBadge || 'أنمي') : item.type === 'kdrama' ? (t.kdramaBadge || 'دراما كورية') : item.type === 'series' ? (t.seriesBadge || 'مسلسل') : (t.movieBadge || 'فيلم')}
                                                         </span>
                                                         <span>{item.year}</span>
                                                         {item.rating && item.rating !== 'N/A' && (
@@ -343,17 +345,6 @@ export default function Navbar({ onSearch, activeTab, setActiveTab, uiLang, setU
                     {t.all}
                 </button>
                 <button
-                    onClick={() => setActiveTab('channels')}
-                    className={`px-3.5 py-1.5 rounded-xl transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
-                        activeTab === 'channels' 
-                            ? 'bg-white text-black font-extrabold shadow-lg shadow-white/10' 
-                            : 'bg-[#181818] text-gray-300 hover:bg-[#252525] border border-[#262626]'
-                    }`}
-                >
-                    <Layers size={14} />
-                    {t.channels}
-                </button>
-                <button
                     onClick={() => setActiveTab('movies')}
                     className={`px-3.5 py-1.5 rounded-xl transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
                         activeTab === 'movies' 
@@ -385,6 +376,17 @@ export default function Navbar({ onSearch, activeTab, setActiveTab, uiLang, setU
                 >
                     <Sparkles size={14} className={activeTab === 'anime' ? 'text-purple-600' : 'text-purple-400'} />
                     {t.anime}
+                </button>
+                <button
+                    onClick={() => setActiveTab('kdrama')}
+                    className={`px-3.5 py-1.5 rounded-xl transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+                        activeTab === 'kdrama' 
+                            ? 'bg-white text-black font-extrabold shadow-lg shadow-white/10' 
+                            : 'bg-[#181818] text-gray-300 hover:bg-[#252525] border border-[#262626]'
+                    }`}
+                >
+                    <Sparkles size={14} className={activeTab === 'kdrama' ? 'text-pink-600' : 'text-pink-400'} />
+                    {t.kdrama || 'دراما كورية'}
                 </button>
                 <button
                     onClick={() => setActiveTab('history')}

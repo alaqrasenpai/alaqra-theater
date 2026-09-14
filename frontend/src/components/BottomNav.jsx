@@ -1,13 +1,13 @@
 import React from 'react';
 import { Home, Film, Tv, Sparkles, Clock, Layers } from 'lucide-react';
 
-export default function BottomNav({ activeTab, setActiveTab, onSelectChannel, t }) {
+export default function BottomNav({ activeTab, setActiveTab, t }) {
     const tabs = [
         { id: 'all', label: t?.all || 'الرئيسية', icon: Home },
         { id: 'movies', label: t?.movies || 'أفلام', icon: Film },
         { id: 'series', label: t?.series || 'مسلسلات', icon: Tv },
-        { id: 'anime', label: t?.anime || 'أنمي', icon: Sparkles },
-        { id: 'channels', label: t?.channels || 'قنوات', icon: Layers },
+        { id: 'kdrama', label: t?.kdramaBadge || 'كوري', icon: Sparkles },
+        { id: 'anime', label: t?.anime || 'أنمي', icon: Layers },
         { id: 'history', label: t?.history || 'السجل', icon: Clock },
     ];
 
@@ -21,7 +21,6 @@ export default function BottomNav({ activeTab, setActiveTab, onSelectChannel, t 
                     <button
                         key={tab.id}
                         onClick={() => {
-                            if (onSelectChannel) onSelectChannel(null);
                             setActiveTab(tab.id);
                             window.scrollTo({ top: 0, behavior: 'smooth' });
                         }}

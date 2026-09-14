@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { POPULAR_ANIME_CATALOG } from '../data/animeCatalog';
 import { POPULAR_MOVIES_CATALOG } from '../data/fallbackMovies';
+import { POPULAR_KDRAMA_CATALOG } from '../data/kdramaCatalog';
 
 export const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -73,7 +74,7 @@ export async function fetchSeries(query = '') {
                 title: show.name,
                 year: show.premiered ? show.premiered.split('-')[0] : 'N/A',
                 rating: show.rating?.average || 'N/A',
-                poster: show.image?.original || show.image?.medium || '',
+                poster: show.image?.medium || show.image?.original || '',
                 summary: show.summary ? show.summary.replace(/<[^>]+>/g, '') : '',
                 type: 'series',
                 imdbCode: show.externals?.imdb || '',
@@ -118,7 +119,7 @@ export async function fetchAnime(query = '') {
                     title: item.show.name,
                     year: item.show.premiered ? item.show.premiered.split('-')[0] : 'N/A',
                     rating: item.show.rating?.average || '8.5',
-                    poster: item.show.image?.original || item.show.image?.medium || '',
+                    poster: item.show.image?.medium || item.show.image?.original || '',
                     summary: item.show.summary ? item.show.summary.replace(/<[^>]+>/g, '') : '',
                     type: 'anime',
                     imdbCode: item.show.externals?.imdb || '',
@@ -132,9 +133,76 @@ export async function fetchAnime(query = '') {
     return POPULAR_ANIME_CATALOG.filter(a => isSafeContent(a.title, a.summary, a.genres));
 }
 
-// 4. Fetch Episodes for Series or Anime
+// 4. Fetch Korean Dramas (K-Drama)
+export async function fetchKDrama(query = '') {
+    try {
+        const res = await axios.get(`${API_BASE}/api/search/kdrama`, { params: { query }, timeout: 6000 });
+        if (res.data?.results && res.data.results.length > 0) {
+            return res.data.results.filter(k => isSafeContent(k.title, k.summary, k.genres));
+        }
+    } catch (err) {
+        console.warn('Backend kdrama search unreachable, using client kdrama catalog:', err.message);
+    }
+
+    // Filter local K-Drama catalog if query provided
+    if (query.trim()) {
+        const q = query.toLowerCase();
+        const filtered = POPULAR_KDRAMA_CATALOG
+            .filter(k => isSafeContent(k.title, k.summary, k.genres))
+            .filter(k => 
+                k.title.toLowerCase().includes(q) || 
+                k.summary.toLowerCase().includes(q)
+            );
+        if (filtered.length > 0) return filtered;
+
+        // Try direct TVMaze for K-Drama search
+        try {
+            const tvRes = await axios.get(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query.trim())}`);
+            return (tvRes.data || [])
+                .filter(item => {
+                    const s = item.show;
+                    if (!s) return false;
+                    if (s.genres?.includes('Anime')) return false;
+                    const preMatched = POPULAR_KDRAMA_CATALOG.find(k => 
+                        k.showId === s.id || 
+                        (s.name && k.title.toLowerCase().includes(s.name.toLowerCase()))
+                    );
+                    if (preMatched) return isSafeContent(s.name, s.summary, s.genres);
+                    const country = s.network?.country?.code || s.webChannel?.country?.code || '';
+                    const isKorean = country === 'KR' || /korean|k-drama|kdrama|south korea/i.test(`${s.name} ${s.summary}`);
+                    if (!isKorean) return false;
+                    return isSafeContent(s.name, s.summary, s.genres);
+                })
+                .map(item => {
+                    const s = item.show;
+                    const preMatched = POPULAR_KDRAMA_CATALOG.find(k => 
+                        k.showId === s.id || 
+                        (s.name && k.title.toLowerCase().includes(s.name.toLowerCase()))
+                    );
+                    return {
+                        id: `kdrama-${s.id}`,
+                        showId: s.id,
+                        title: preMatched ? preMatched.title : s.name,
+                        year: s.premiered ? s.premiered.split('-')[0] : 'N/A',
+                        rating: preMatched ? preMatched.rating : (s.rating?.average ? String(s.rating.average) : '8.5'),
+                        poster: preMatched ? preMatched.poster : (s.image?.medium || s.image?.original || ''),
+                        summary: preMatched ? preMatched.summary : (s.summary ? s.summary.replace(/<[^>]+>/g, '') : ''),
+                        type: 'kdrama',
+                        imdbCode: preMatched?.imdbCode || s.externals?.imdb || '',
+                        genres: s.genres || ['Drama', 'K-Drama']
+                    };
+                });
+        } catch (e) {
+            return [];
+        }
+    }
+
+    return POPULAR_KDRAMA_CATALOG.filter(k => isSafeContent(k.title, k.summary, k.genres));
+}
+
+// 5. Fetch Episodes for Series, Anime, or KDrama
 export async function fetchEpisodes(id) {
-    const cleanId = String(id).replace(/^(series|anime)-/, '');
+    const cleanId = String(id).replace(/^(series|anime|kdrama)-/, '');
     try {
         const res = await axios.get(`${API_BASE}/api/search/series/${id}/episodes`, { timeout: 6000 });
         if (res.data?.episodes && res.data.episodes.length > 0) {
@@ -161,16 +229,17 @@ export async function fetchEpisodes(id) {
     }
 }
 
-// 5. Live Search Autocomplete Suggestions (Fast, Safe, Deduplicated)
+// 6. Live Search Autocomplete Suggestions (Fast, Safe, Deduplicated across Movies, Series, Anime, KDrama)
 export async function fetchAutocomplete(query = '') {
     if (!query || query.trim().length < 2) return [];
     const q = query.trim().toLowerCase();
 
     try {
-        const [movies, series, animes] = await Promise.all([
+        const [movies, series, animes, kdramas] = await Promise.all([
             fetchMovies(q),
             fetchSeries(q),
-            fetchAnime(q)
+            fetchAnime(q),
+            fetchKDrama(q)
         ]);
 
         const pool = [];
@@ -178,14 +247,14 @@ export async function fetchAutocomplete(query = '') {
 
         const addIfUnique = (item) => {
             if (!item || !item.title) return;
-            // Key based on alphanumeric characters in title
             const key = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
             if (!key || seen.has(key)) return;
             seen.add(key);
             pool.push(item);
         };
 
-        // Prioritize animes and movies
+        // Prioritize kdrama, animes, and movies
+        (kdramas || []).forEach(addIfUnique);
         (animes || []).forEach(addIfUnique);
         (movies || []).forEach(addIfUnique);
         (series || []).forEach(addIfUnique);

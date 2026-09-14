@@ -10,6 +10,8 @@ const YTS_MIRRORS = [
     'https://yts.mx'
 ];
 
+const { POPULAR_KDRAMA_CATALOG } = require('../data/kdramaCatalog');
+
 // Top Legendary Anime Catalog with pre-matched IMDB codes and TVMaze show IDs
 const POPULAR_ANIME_CATALOG = [
     {
@@ -269,7 +271,7 @@ router.get('/series', async (req, res) => {
             title: show.name,
             year: show.premiered ? show.premiered.split('-')[0] : 'N/A',
             rating: show.rating?.average || 'N/A',
-            poster: show.image?.original || show.image?.medium || '',
+            poster: show.image?.medium || show.image?.original || '',
             summary: show.summary ? show.summary.replace(/<[^>]+>/g, '') : '',
             type: 'series',
             imdbCode: show.externals?.imdb || '',
@@ -283,10 +285,10 @@ router.get('/series', async (req, res) => {
     }
 });
 
-// Get Episodes for Series or Anime
+// Get Episodes for Series, Anime, or KDrama
 router.get('/series/:id/episodes', async (req, res) => {
     const { id } = req.params;
-    const cleanId = id.replace(/^(series|anime)-/, '');
+    const cleanId = id.replace(/^(series|anime|kdrama)-/, '');
     try {
         const response = await axios.get(`https://api.tvmaze.com/shows/${cleanId}/episodes`, { timeout: 5000 });
         const episodes = (response.data || []).map(ep => ({
@@ -334,7 +336,7 @@ router.get('/anime', async (req, res) => {
                 title: catalogMatch?.title || show.name,
                 year: show.premiered ? show.premiered.split('-')[0] : 'N/A',
                 rating: show.rating?.average ? show.rating.average.toFixed(1) : (catalogMatch?.rating || '8.5'),
-                poster: show.image?.original || show.image?.medium || catalogMatch?.poster || '',
+                poster: show.image?.medium || show.image?.original || catalogMatch?.poster || '',
                 summary: show.summary ? show.summary.replace(/<[^>]+>/g, '') : (catalogMatch?.summary || ''),
                 type: 'anime',
                 imdbCode: show.externals?.imdb || catalogMatch?.imdbCode || '',
@@ -358,6 +360,72 @@ router.get('/anime', async (req, res) => {
     } catch (err) {
         console.error('Anime search error:', err.message);
         res.json({ results: POPULAR_ANIME_CATALOG });
+    }
+});
+
+// Search Korean Dramas (K-Drama) with Verified IMDb Codes & TVMaze Integration
+router.get('/kdrama', async (req, res) => {
+    const { query = '' } = req.query;
+
+    if (!query.trim()) {
+        return res.json({ results: POPULAR_KDRAMA_CATALOG });
+    }
+
+    try {
+        const searchUrl = `https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query.trim())}`;
+        const response = await axios.get(searchUrl, { timeout: 5000 });
+        const items = response.data || [];
+
+        const kdramaResults = items
+            .filter(item => {
+                const show = item.show;
+                if (!show) return false;
+                if (show.genres?.includes('Anime')) return false;
+                const preMatched = POPULAR_KDRAMA_CATALOG.find(k => 
+                    k.showId === show.id || 
+                    (show.name && k.title.toLowerCase().includes(show.name.toLowerCase()))
+                );
+                if (preMatched) return isSafeContent(show.name, show.summary, show.genres);
+                const country = show.network?.country?.code || show.webChannel?.country?.code || '';
+                const isKorean = country === 'KR' || /korean|k-drama|kdrama|south korea/i.test(`${show.name} ${show.summary}`);
+                if (!isKorean) return false;
+                return isSafeContent(show.name, show.summary, show.genres);
+            })
+            .map(item => {
+                const show = item.show;
+                const preMatched = POPULAR_KDRAMA_CATALOG.find(k => 
+                    k.showId === show.id || 
+                    (show.name && k.title.toLowerCase().includes(show.name.toLowerCase()))
+                );
+
+                return {
+                    id: `kdrama-${show.id}`,
+                    showId: show.id,
+                    title: preMatched ? preMatched.title : show.name,
+                    year: show.premiered ? show.premiered.split('-')[0] : 'N/A',
+                    rating: preMatched ? preMatched.rating : (show.rating?.average ? String(show.rating.average) : 'N/A'),
+                    poster: preMatched ? preMatched.poster : (show.image?.medium || show.image?.original || ''),
+                    summary: preMatched ? preMatched.summary : (show.summary ? show.summary.replace(/<[^>]+>/g, '') : ''),
+                    type: 'kdrama',
+                    imdbCode: preMatched?.imdbCode || show.externals?.imdb || '',
+                    genres: show.genres || ['Drama', 'K-Drama']
+                };
+            })
+            .slice(0, 24);
+
+        if (kdramaResults.length === 0) {
+            // Fallback: search within local POPULAR_KDRAMA_CATALOG
+            const filtered = POPULAR_KDRAMA_CATALOG.filter(k => 
+                k.title.toLowerCase().includes(query.toLowerCase()) || 
+                k.summary.toLowerCase().includes(query.toLowerCase())
+            );
+            return res.json({ results: filtered });
+        }
+
+        res.json({ results: kdramaResults });
+    } catch (err) {
+        console.error('K-Drama search error:', err.message);
+        res.json({ results: POPULAR_KDRAMA_CATALOG });
     }
 });
 

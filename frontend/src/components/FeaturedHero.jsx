@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Star, Sparkles, Tv, Film, ChevronRight, ChevronLeft, CheckCircle2 } from 'lucide-react';
-import { getChannelForMovie } from '../data/channels';
+import { Play, Star, ChevronRight, ChevronLeft } from 'lucide-react';
 
-export default function FeaturedHero({ movies = [], onPlay, onSelectChannel, uiLang = 'ar', t }) {
+export default function FeaturedHero({ movies = [], onPlay, uiLang = 'ar', t }) {
     const [currentIndex, setCurrentIndex] = useState(0);
     const isRtl = uiLang === 'ar';
 
@@ -22,8 +21,6 @@ export default function FeaturedHero({ movies = [], onPlay, onSelectChannel, uiL
     if (featuredList.length === 0) return null;
 
     const current = featuredList[currentIndex] || featuredList[0];
-    const channel = getChannelForMovie(current);
-    const channelName = channel ? (typeof channel.name === 'string' ? channel.name : (channel.name?.en || channel.name?.ar)) : '';
 
     const handleNext = () => setCurrentIndex((currentIndex + 1) % featuredList.length);
     const handlePrev = () => setCurrentIndex((currentIndex - 1 + featuredList.length) % featuredList.length);
@@ -45,7 +42,7 @@ export default function FeaturedHero({ movies = [], onPlay, onSelectChannel, uiL
 
                 {/* Content Overlay */}
                 <div className="absolute inset-0 p-4 sm:p-8 md:p-10 flex flex-col justify-end gap-2.5 sm:gap-3.5 max-w-2xl z-10">
-                    {/* Trending Pill & Channel Tag */}
+                    {/* Trending Pill */}
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className="px-2.5 py-1 rounded-lg bg-red-600/95 text-white font-black text-[10px] sm:text-xs flex items-center gap-1 shadow-lg shadow-red-600/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
@@ -54,10 +51,11 @@ export default function FeaturedHero({ movies = [], onPlay, onSelectChannel, uiL
 
                         <span className={`px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-bold border backdrop-blur-md ${
                             current.type === 'anime' ? 'bg-purple-900/50 text-purple-300 border-purple-500/30' :
+                            current.type === 'kdrama' ? 'bg-pink-900/50 text-pink-300 border-pink-500/30' :
                             current.type === 'series' ? 'bg-emerald-900/50 text-emerald-300 border-emerald-500/30' :
                             'bg-blue-900/50 text-blue-300 border-blue-500/30'
                         }`}>
-                            {current.type === 'anime' ? (t?.animeBadge || 'أنمي') : current.type === 'series' ? (t?.seriesBadge || 'مسلسل') : (t?.movieBadge || 'فيلم')}
+                            {current.type === 'anime' ? (t?.animeBadge || 'أنمي') : current.type === 'kdrama' ? (t?.kdramaBadge || 'دراما كورية') : current.type === 'series' ? (t?.seriesBadge || 'مسلسل') : (t?.movieBadge || 'فيلم')}
                         </span>
 
                         {current.rating && current.rating !== 'N/A' && (
@@ -84,7 +82,7 @@ export default function FeaturedHero({ movies = [], onPlay, onSelectChannel, uiL
                         </p>
                     )}
 
-                    {/* Action Buttons: Big Watch Now + Channel Link */}
+                    {/* Action Buttons: Big Watch Now */}
                     <div className="flex items-center gap-2.5 pt-1 flex-wrap">
                         <button
                             onClick={() => onPlay(current)}
@@ -93,19 +91,6 @@ export default function FeaturedHero({ movies = [], onPlay, onSelectChannel, uiL
                             <Play size={18} className="fill-white" />
                             <span>{uiLang === 'ar' ? 'تشغيل الآن' : 'Watch Now'}</span>
                         </button>
-
-                        {channel && (
-                            <button
-                                onClick={() => onSelectChannel && onSelectChannel(channel)}
-                                className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-md text-white font-bold text-xs sm:text-sm border border-white/15 transition-all duration-200 active:scale-95"
-                            >
-                                <div className={`w-4 h-4 rounded-full bg-gradient-to-tr ${channel.color} flex items-center justify-center text-[7px] font-black text-white shrink-0`}>
-                                    {channel.avatarText.slice(0, 2)}
-                                </div>
-                                <span className="truncate max-w-[120px]">{channelName}</span>
-                                <CheckCircle2 size={12} className="text-blue-400 shrink-0" />
-                            </button>
-                        )}
                     </div>
                 </div>
 
