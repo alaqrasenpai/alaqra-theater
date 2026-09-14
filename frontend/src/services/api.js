@@ -4,12 +4,25 @@ import { POPULAR_MOVIES_CATALOG } from '../data/fallbackMovies';
 
 export const API_BASE = import.meta.env.VITE_API_URL || '';
 
+// Strict Adult / NSFW Content Filter
+const ADULT_GENRES = new Set(['Adult', 'Erotica', 'Pornography', 'Hentai', 'Ecchi', 'Sex']);
+const ADULT_REGEX = /\b(xxx|porn|pornstar|erotic|erotica|sex|sexy|adult|nude|nudity|naked|stripper|blowjob|masturbat|gangbang|hardcore|softcore|hentai|jav|fetish|milf|camgirl|dildo|vagina|penis|boobs)\b/i;
+
+export function isSafeContent(title = '', summary = '', genres = []) {
+    if (genres && Array.isArray(genres)) {
+        if (genres.some(g => ADULT_GENRES.has(g))) return false;
+    }
+    const text = `${title} ${summary}`;
+    if (ADULT_REGEX.test(text)) return false;
+    return true;
+}
+
 // 1. Fetch Movies
 export async function fetchMovies(query = '') {
     try {
         const res = await axios.get(`${API_BASE}/api/search/movies`, { params: { query }, timeout: 6000 });
         if (res.data?.results && res.data.results.length > 0) {
-            return res.data.results;
+            return res.data.results.filter(m => isSafeContent(m.title, m.summary, m.genres));
         }
     } catch (err) {
         console.warn('Backend movie search unreachable, using fallback catalog:', err.message);
@@ -18,17 +31,21 @@ export async function fetchMovies(query = '') {
     // Client-side fallback if backend is offline on Netlify
     if (query.trim()) {
         const q = query.toLowerCase();
-        return POPULAR_MOVIES_CATALOG.filter(m => m.title.toLowerCase().includes(q) || m.summary.toLowerCase().includes(q));
+        return POPULAR_MOVIES_CATALOG
+            .filter(m => isSafeContent(m.title, m.summary, m.genres))
+            .filter(m => m.title.toLowerCase().includes(q) || m.summary.toLowerCase().includes(q));
     }
-    return POPULAR_MOVIES_CATALOG;
+    return POPULAR_MOVIES_CATALOG.filter(m => isSafeContent(m.title, m.summary, m.genres));
 }
 
-// 2. Fetch Series (Direct TVMaze fallback works in all browsers with zero CORS issues)
+// 2. Fetch Series (Strictly excludes anime and adult content)
 export async function fetchSeries(query = '') {
     try {
         const res = await axios.get(`${API_BASE}/api/search/series`, { params: { query }, timeout: 6000 });
         if (res.data?.results && res.data.results.length > 0) {
-            return res.data.results;
+            return res.data.results
+                .filter(s => !s.genres?.includes('Anime'))
+                .filter(s => isSafeContent(s.title, s.summary, s.genres));
         }
     } catch (err) {
         console.warn('Backend series search unreachable, fetching directly from TVMaze:', err.message);
@@ -40,20 +57,28 @@ export async function fetchSeries(query = '') {
             ? `https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query.trim())}`
             : 'https://api.tvmaze.com/shows?page=1';
         const tvmazeRes = await axios.get(url, { timeout: 6000 });
-        const raw = query.trim() ? (tvmazeRes.data || []).map(item => item.show) : (tvmazeRes.data || []).slice(0, 24);
+        const raw = query.trim() ? (tvmazeRes.data || []).map(item => item.show) : (tvmazeRes.data || []).slice(0, 36);
 
-        return raw.map(show => ({
-            id: `series-${show.id}`,
-            showId: show.id,
-            title: show.name,
-            year: show.premiered ? show.premiered.split('-')[0] : 'N/A',
-            rating: show.rating?.average || 'N/A',
-            poster: show.image?.original || show.image?.medium || '',
-            summary: show.summary ? show.summary.replace(/<[^>]+>/g, '') : '',
-            type: 'series',
-            imdbCode: show.externals?.imdb || '',
-            genres: show.genres || []
-        }));
+        return raw
+            .filter(show => {
+                if (!show) return false;
+                // Exclude anime so it never duplicates with the anime category
+                if (show.genres?.includes('Anime')) return false;
+                return isSafeContent(show.name, show.summary, show.genres);
+            })
+            .slice(0, 24)
+            .map(show => ({
+                id: `series-${show.id}`,
+                showId: show.id,
+                title: show.name,
+                year: show.premiered ? show.premiered.split('-')[0] : 'N/A',
+                rating: show.rating?.average || 'N/A',
+                poster: show.image?.original || show.image?.medium || '',
+                summary: show.summary ? show.summary.replace(/<[^>]+>/g, '') : '',
+                type: 'series',
+                imdbCode: show.externals?.imdb || '',
+                genres: show.genres || []
+            }));
     } catch (e) {
         console.error('TVMaze direct fallback error:', e.message);
         return [];
@@ -65,7 +90,7 @@ export async function fetchAnime(query = '') {
     try {
         const res = await axios.get(`${API_BASE}/api/search/anime`, { params: { query }, timeout: 6000 });
         if (res.data?.results && res.data.results.length > 0) {
-            return res.data.results;
+            return res.data.results.filter(a => isSafeContent(a.title, a.summary, a.genres));
         }
     } catch (err) {
         console.warn('Backend anime search unreachable, using client anime catalog:', err.message);
@@ -74,33 +99,37 @@ export async function fetchAnime(query = '') {
     // Filter local anime catalog if query provided
     if (query.trim()) {
         const q = query.toLowerCase();
-        const filtered = POPULAR_ANIME_CATALOG.filter(a => 
-            a.title.toLowerCase().includes(q) || 
-            a.summary.toLowerCase().includes(q)
-        );
+        const filtered = POPULAR_ANIME_CATALOG
+            .filter(a => isSafeContent(a.title, a.summary, a.genres))
+            .filter(a => 
+                a.title.toLowerCase().includes(q) || 
+                a.summary.toLowerCase().includes(q)
+            );
         if (filtered.length > 0) return filtered;
 
         // Try direct TVMaze for anime search
         try {
             const tvRes = await axios.get(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(query.trim())}`);
-            return (tvRes.data || []).map(item => ({
-                id: `anime-${item.show.id}`,
-                showId: item.show.id,
-                title: item.show.name,
-                year: item.show.premiered ? item.show.premiered.split('-')[0] : 'N/A',
-                rating: item.show.rating?.average || '8.5',
-                poster: item.show.image?.original || item.show.image?.medium || '',
-                summary: item.show.summary ? item.show.summary.replace(/<[^>]+>/g, '') : '',
-                type: 'anime',
-                imdbCode: item.show.externals?.imdb || '',
-                genres: item.show.genres || ['Anime']
-            }));
+            return (tvRes.data || [])
+                .filter(item => isSafeContent(item.show?.name, item.show?.summary, item.show?.genres))
+                .map(item => ({
+                    id: `anime-${item.show.id}`,
+                    showId: item.show.id,
+                    title: item.show.name,
+                    year: item.show.premiered ? item.show.premiered.split('-')[0] : 'N/A',
+                    rating: item.show.rating?.average || '8.5',
+                    poster: item.show.image?.original || item.show.image?.medium || '',
+                    summary: item.show.summary ? item.show.summary.replace(/<[^>]+>/g, '') : '',
+                    type: 'anime',
+                    imdbCode: item.show.externals?.imdb || '',
+                    genres: item.show.genres || ['Anime']
+                }));
         } catch (e) {
             return [];
         }
     }
 
-    return POPULAR_ANIME_CATALOG;
+    return POPULAR_ANIME_CATALOG.filter(a => isSafeContent(a.title, a.summary, a.genres));
 }
 
 // 4. Fetch Episodes for Series or Anime
@@ -128,6 +157,41 @@ export async function fetchEpisodes(id) {
         }));
     } catch (e) {
         console.error('TVMaze episodes direct error:', e.message);
+        return [];
+    }
+}
+
+// 5. Live Search Autocomplete Suggestions (Fast, Safe, Deduplicated)
+export async function fetchAutocomplete(query = '') {
+    if (!query || query.trim().length < 2) return [];
+    const q = query.trim().toLowerCase();
+
+    try {
+        const [movies, series, animes] = await Promise.all([
+            fetchMovies(q),
+            fetchSeries(q),
+            fetchAnime(q)
+        ]);
+
+        const pool = [];
+        const seen = new Set();
+
+        const addIfUnique = (item) => {
+            if (!item || !item.title) return;
+            // Key based on alphanumeric characters in title
+            const key = item.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            pool.push(item);
+        };
+
+        // Prioritize animes and movies
+        (animes || []).forEach(addIfUnique);
+        (movies || []).forEach(addIfUnique);
+        (series || []).forEach(addIfUnique);
+
+        return pool.slice(0, 6);
+    } catch (e) {
         return [];
     }
 }

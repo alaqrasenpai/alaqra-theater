@@ -177,6 +177,19 @@ const FALLBACK_MOVIES = [
     }
 ];
 
+// Strict Adult / NSFW Content Filter
+const ADULT_GENRES = new Set(['Adult', 'Erotica', 'Pornography', 'Hentai', 'Ecchi', 'Sex']);
+const ADULT_REGEX = /\b(xxx|porn|pornstar|erotic|erotica|sex|sexy|adult|nude|nudity|naked|stripper|blowjob|masturbat|gangbang|hardcore|softcore|hentai|jav|fetish|milf|camgirl|dildo|vagina|penis|boobs)\b/i;
+
+function isSafeContent(title = '', summary = '', genres = []) {
+    if (genres && Array.isArray(genres)) {
+        if (genres.some(g => ADULT_GENRES.has(g))) return false;
+    }
+    const textToCheck = `${title} ${summary}`;
+    if (ADULT_REGEX.test(textToCheck)) return false;
+    return true;
+}
+
 // Search Movies with auto-mirror failover
 router.get('/movies', async (req, res) => {
     const { query = '', page = 1 } = req.query;
@@ -184,28 +197,32 @@ router.get('/movies', async (req, res) => {
 
     for (const mirror of YTS_MIRRORS) {
         try {
-            let url = `${mirror}/api/v2/list_movies.json?limit=24&page=${page}&sort_by=download_count`;
+            let url = `${mirror}/api/v2/list_movies.json?limit=30&page=${page}&sort_by=download_count`;
             if (query.trim()) {
-                url = `${mirror}/api/v2/list_movies.json?limit=24&page=${page}&query_term=${encodeURIComponent(query.trim())}`;
+                url = `${mirror}/api/v2/list_movies.json?limit=30&page=${page}&query_term=${encodeURIComponent(query.trim())}`;
             }
 
             const response = await axios.get(url, { timeout: 4500 });
             if (response.data?.status === 'ok' && response.data?.data?.movies) {
-                fetchedMovies = response.data.data.movies.map(movie => ({
-                    id: `movie-${movie.id}`,
-                    title: movie.title,
-                    year: movie.year,
-                    rating: movie.rating || 0,
-                    poster: movie.medium_cover_image || movie.large_cover_image,
-                    summary: movie.summary || movie.description_full || '',
-                    type: 'movie',
-                    imdbCode: movie.imdb_code || '',
-                    torrents: (movie.torrents || []).map(t => ({
-                        quality: t.quality,
-                        size: t.size,
-                        magnet: `magnet:?xt=urn:btih:${t.hash}&dn=${encodeURIComponent(movie.title)}&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://open.demonii.com:1337/announce&tr=udp://tracker.openbittorrent.com:80&tr=udp://tracker.coppersurfer.tk:6969`
+                fetchedMovies = response.data.data.movies
+                    .filter(movie => isSafeContent(movie.title, movie.summary || movie.description_full, movie.genres))
+                    .map(movie => ({
+                        id: `movie-${movie.id}`,
+                        title: movie.title,
+                        year: movie.year,
+                        rating: movie.rating || 0,
+                        poster: movie.medium_cover_image || movie.large_cover_image,
+                        summary: movie.summary || movie.description_full || '',
+                        type: 'movie',
+                        imdbCode: movie.imdb_code || '',
+                        genres: movie.genres || [],
+                        torrents: (movie.torrents || []).map(t => ({
+                            quality: t.quality,
+                            size: t.size,
+                            magnet: `magnet:?xt=urn:btih:${t.hash}&dn=${encodeURIComponent(movie.title)}&tr=udp://tracker.opentrackr.org:1337/announce&tr=udp://open.demonii.com:1337/announce&tr=udp://tracker.openbittorrent.com:80&tr=udp://tracker.coppersurfer.tk:6969`
+                        }))
                     }))
-                }));
+                    .slice(0, 24);
                 break;
             }
         } catch (err) {
@@ -223,7 +240,7 @@ router.get('/movies', async (req, res) => {
     });
 });
 
-// Search TV Series via TVMaze
+// Search TV Series via TVMaze (Strictly filters out Anime and NSFW content)
 router.get('/series', async (req, res) => {
     const { query = '' } = req.query;
     try {
@@ -235,9 +252,18 @@ router.get('/series', async (req, res) => {
         const response = await axios.get(url, { timeout: 5000 });
         const data = response.data || [];
 
-        const rawShows = query.trim() ? data.map(item => item.show) : data.slice(0, 24);
+        const rawList = query.trim() ? data.map(item => item.show) : data.slice(0, 40);
+        
+        // Exclude anime (they belong strictly to /anime) and filter out NSFW
+        const safeSeries = rawList
+            .filter(show => {
+                if (!show) return false;
+                if (show.genres?.includes('Anime')) return false;
+                return isSafeContent(show.name, show.summary, show.genres);
+            })
+            .slice(0, 24);
 
-        const seriesList = rawShows.map(show => ({
+        const seriesList = safeSeries.map(show => ({
             id: `series-${show.id}`,
             showId: show.id,
             title: show.name,
@@ -316,16 +342,19 @@ router.get('/anime', async (req, res) => {
             };
         });
 
+        const safeResults = results.filter(a => isSafeContent(a.title, a.summary, a.genres));
+
         // If TVMaze found nothing, filter our popular anime catalog
-        if (results.length === 0) {
+        if (safeResults.length === 0) {
             const filtered = POPULAR_ANIME_CATALOG.filter(a => 
-                a.title.toLowerCase().includes(query.toLowerCase()) || 
-                a.summary.toLowerCase().includes(query.toLowerCase())
+                (a.title.toLowerCase().includes(query.toLowerCase()) || 
+                a.summary.toLowerCase().includes(query.toLowerCase())) &&
+                isSafeContent(a.title, a.summary, a.genres)
             );
             return res.json({ results: filtered });
         }
 
-        res.json({ results });
+        res.json({ results: safeResults });
     } catch (err) {
         console.error('Anime search error:', err.message);
         res.json({ results: POPULAR_ANIME_CATALOG });

@@ -326,7 +326,24 @@ export default function VideoPlayer({
         const animeQuery = isAnime ? '?dub=0&sub=1&audio=ja' : '';
         const animeAmp = isAnime ? '&dub=0&sub=1&audio=ja' : '';
 
+        const isArabicUi = uiLang === 'ar';
+        const embedMasterParams = isArabicUi 
+            ? '?lang=ar&sub=ar&default_sub=ar&sub_lang=ar&subtitles=arabic&cc_load_policy=1' 
+            : '';
+
         if (directServer === 1) {
+            // EmbedMaster - Primary Default
+            if (isEpisodic && imdb) {
+                return `https://embedmaster.link/tv/${imdb}/${selectedSeason}/${selectedEpisode}${embedMasterParams}`;
+            }
+            if (imdb) {
+                return `https://embedmaster.link/movie/${imdb}${embedMasterParams}`;
+            }
+            return `https://embedmaster.link/movie/${encodeURIComponent(movie.title)}${embedMasterParams}`;
+        }
+
+        if (directServer === 2) {
+            // VidSrc PM - Fast CDN + Working Subtitles
             if (isEpisodic && imdb) {
                 return `https://vidsrc.pm/embed/tv/${imdb}/${selectedSeason}/${selectedEpisode}${animeQuery}`;
             }
@@ -336,8 +353,8 @@ export default function VideoPlayer({
             return `https://vidsrc.pm/embed/movie/${encodeURIComponent(movie.title)}${animeQuery}`;
         }
 
-        if (directServer === 2) {
-            // Dedicated 2Embed FHD 1080p Stream
+        if (directServer === 3) {
+            // 2Embed FHD - High Bitrate 1080p
             if (isEpisodic && imdb) {
                 return `https://2embed.cc/embedtv/${imdb}&s=${selectedSeason}&e=${selectedEpisode}${animeAmp}`;
             }
@@ -347,7 +364,7 @@ export default function VideoPlayer({
             return `https://2embed.cc/embed/${encodeURIComponent(movie.title)}${animeAmp}`;
         }
 
-        if (directServer === 3) {
+        if (directServer === 4) {
             // MultiEmbed Backup Server
             if (isEpisodic && imdb) {
                 return `https://multiembed.mov/?video_id=${imdb}&s=${selectedSeason}&e=${selectedEpisode}${animeAmp}`;
@@ -358,18 +375,7 @@ export default function VideoPlayer({
             return `https://multiembed.mov/?video_id=${encodeURIComponent(movie.title)}${animeAmp}`;
         }
 
-        if (directServer === 4) {
-            // EmbedMaster - Fast Aggregator with Strict Ad Sandbox
-            if (isEpisodic && imdb) {
-                return `https://embedmaster.link/tv/${imdb}/${selectedSeason}/${selectedEpisode}`;
-            }
-            if (imdb) {
-                return `https://embedmaster.link/movie/${imdb}`;
-            }
-            return `https://embedmaster.link/movie/${encodeURIComponent(movie.title)}`;
-        }
-
-        return `https://vidsrc.pm/embed/movie/${imdb || encodeURIComponent(movie.title)}${animeQuery}`;
+        return `https://embedmaster.link/movie/${imdb || encodeURIComponent(movie.title)}`;
     };
 
     return (
@@ -424,14 +430,8 @@ export default function VideoPlayer({
                     <div className="flex items-center gap-2 text-gray-300">
                         <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                         <span>
-                            {t?.activeServer || 'السيرفر المفعّل:'} <strong className="text-white">{directServer === 1 ? (t?.server1Name || 'سيرفر 1 (الأساسي)') : directServer === 2 ? (t?.server2Name || 'سيرفر 2') : directServer === 3 ? (t?.server3Name || 'سيرفر 3') : (t?.server4Name || 'سيرفر 4')}</strong>
+                            {t?.activeServer || 'السيرفر المفعّل:'} <strong className="text-white">{directServer === 1 ? (t?.server1Name || 'سيرفر 1 (EmbedMaster • الأساسي)') : directServer === 2 ? (t?.server2Name || 'سيرفر 2') : directServer === 3 ? (t?.server3Name || 'سيرفر 3') : (t?.server4Name || 'سيرفر 4')}</strong>
                         </span>
-                        {directServer === 4 && (
-                            <span className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1">
-                                <ShieldCheck size={11} />
-                                <span>حظر الإعلانات مفعل</span>
-                            </span>
-                        )}
                     </div>
 
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -447,27 +447,28 @@ export default function VideoPlayer({
                         </button>
                         <button
                             onClick={() => setDirectServer(2)}
-                            className={`px-3 py-1 rounded-xl font-bold transition ${
+                            className={`px-3 py-1 rounded-xl font-bold transition flex items-center gap-1 ${
                                 directServer === 2 ? 'bg-red-600 text-white shadow' : 'bg-[#252525] text-gray-300 hover:bg-[#303030]'
                             }`}
                         >
-                            {t?.server2Name || 'سيرفر 2'}
+                            <span>{t?.server2Name || 'سيرفر 2'}</span>
+                            {directServer === 2 && <Check size={12} />}
                         </button>
                         <button
                             onClick={() => setDirectServer(3)}
-                            className={`px-3 py-1 rounded-xl font-bold transition ${
+                            className={`px-3 py-1 rounded-xl font-bold transition flex items-center gap-1 ${
                                 directServer === 3 ? 'bg-red-600 text-white shadow' : 'bg-[#252525] text-gray-300 hover:bg-[#303030]'
                             }`}
                         >
-                            {t?.server3Name || 'سيرفر 3'}
+                            <span>{t?.server3Name || 'سيرفر 3'}</span>
+                            {directServer === 3 && <Check size={12} />}
                         </button>
                         <button
                             onClick={() => setDirectServer(4)}
                             className={`px-3 py-1 rounded-xl font-bold transition flex items-center gap-1 ${
-                                directServer === 4 ? 'bg-emerald-600 text-white shadow' : 'bg-[#252525] text-gray-300 hover:bg-[#303030]'
+                                directServer === 4 ? 'bg-red-600 text-white shadow' : 'bg-[#252525] text-gray-300 hover:bg-[#303030]'
                             }`}
                         >
-                            <ShieldCheck size={13} className="text-emerald-300" />
                             <span>{t?.server4Name || 'سيرفر 4'}</span>
                             {directServer === 4 && <Check size={12} />}
                         </button>
@@ -544,14 +545,12 @@ export default function VideoPlayer({
                 <div className="w-full h-full relative flex items-center justify-center">
                     {playMode === 'direct' ? (
                         <iframe
-                            key={`${movie.id}-${selectedSeason}-${selectedEpisode}-${directServer}-${reloadKey}`}
+                            key={`${movie.id}-${selectedSeason}-${selectedEpisode}-${directServer}-${uiLang}-${reloadKey}`}
                             src={getDirectStreamUrl()}
                             title={movie.title}
                             className="w-full h-full border-0"
                             allowFullScreen
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
-                            referrerPolicy="no-referrer"
                         />
                     ) : (
                         loading ? (

@@ -5,6 +5,8 @@ import MovieCard from './components/MovieCard';
 import VideoPlayer from './components/VideoPlayer';
 import ChannelsBar from './components/ChannelsBar';
 import ChannelView from './components/ChannelView';
+import FeaturedHero from './components/FeaturedHero';
+import BottomNav from './components/BottomNav';
 import { CHANNELS } from './data/channels';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { translations } from './locales/translations';
@@ -18,34 +20,70 @@ function App() {
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChannel, setSelectedChannel] = useState(null);
+  const [watchHistory, setWatchHistory] = useLocalStorage('alaqra_watch_history', []);
   
   // Bilingual UI state
   const [uiLang, setUiLang] = useLocalStorage('ui_lang', 'ar');
   const t = translations[uiLang] || translations.ar;
   const isRtl = uiLang === 'ar';
 
-  // DB-less local storage for watch history
-  const [watchHistory, setWatchHistory] = useLocalStorage('alaqra_history', []);
+  // Clean alphanumeric normalized title for deduplication
+  const normalizeTitle = (str = '') => {
+    return (str || '')
+      .toLowerCase()
+      .replace(/\(.*?\)/g, '')
+      .replace(/[^a-z0-9\u0600-\u06FF]/g, '')
+      .trim();
+  };
+
+  const deduplicateMedia = (mediaList = []) => {
+    const seenTitles = new Set();
+    const seenImdb = new Set();
+    const result = [];
+
+    // Prioritize anime entries so anime shows remain categorized under 'anime'
+    const sorted = [...mediaList].sort((a, b) => {
+      if (a.type === 'anime' && b.type !== 'anime') return -1;
+      if (b.type === 'anime' && a.type !== 'anime') return 1;
+      return 0;
+    });
+
+    for (const item of sorted) {
+      if (!item || !item.title) continue;
+      const norm = normalizeTitle(item.title);
+      const imdb = item.imdbCode ? item.imdbCode.trim().toLowerCase() : null;
+
+      if (norm && seenTitles.has(norm)) continue;
+      if (imdb && seenImdb.has(imdb)) continue;
+
+      if (norm) seenTitles.add(norm);
+      if (imdb) seenImdb.add(imdb);
+
+      result.push(item);
+    }
+
+    return result;
+  };
 
   // Fetch content based on query and active tab
   const fetchData = async (query = '', tab = activeTab) => {
     setLoading(true);
     try {
       if (tab === 'history') {
-        setItems(watchHistory);
+        setItems(deduplicateMedia(watchHistory));
         setLoading(false);
         return;
       }
 
       if (tab === 'movies') {
         const results = await fetchMovies(query);
-        setItems(results);
+        setItems(deduplicateMedia(results));
       } else if (tab === 'series') {
         const results = await fetchSeries(query);
-        setItems(results);
+        setItems(deduplicateMedia(results));
       } else if (tab === 'anime') {
         const results = await fetchAnime(query);
-        setItems(results);
+        setItems(deduplicateMedia(results));
       } else {
         // 'all' or 'channels': fetch movies, series, and anime in parallel
         const [moviesList, seriesList, animeList] = await Promise.all([
@@ -58,11 +96,11 @@ function App() {
         const combined = [];
         const maxLen = Math.max(moviesList.length, seriesList.length, animeList.length);
         for (let i = 0; i < maxLen; i++) {
+          if (animeList[i]) combined.push(animeList[i]);
           if (moviesList[i]) combined.push(moviesList[i]);
           if (seriesList[i]) combined.push(seriesList[i]);
-          if (animeList[i]) combined.push(animeList[i]);
         }
-        setItems(combined);
+        setItems(deduplicateMedia(combined));
       }
     } catch (err) {
       console.error('Error fetching data:', err);
@@ -97,7 +135,11 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0f0f0f] text-white font-sans antialiased flex flex-col" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="min-h-screen bg-[#09090b] text-white font-sans antialiased flex flex-col relative overflow-x-hidden selection:bg-red-600 selection:text-white" dir={isRtl ? 'rtl' : 'ltr'}>
+      {/* Ambient Cinematic Light Glows */}
+      <div className="fixed top-0 left-1/4 w-80 sm:w-96 h-80 sm:h-96 bg-red-600/10 rounded-full blur-[120px] pointer-events-none -z-10" />
+      <div className="fixed bottom-1/3 right-10 w-80 sm:w-96 h-80 sm:h-96 bg-purple-600/10 rounded-full blur-[140px] pointer-events-none -z-10" />
+
       {!activeItem && (
         <Navbar 
           onSearch={handleSearch} 
@@ -109,10 +151,11 @@ function App() {
           uiLang={uiLang}
           setUiLang={setUiLang}
           t={t}
+          onSelectMovie={handlePlayItem}
         />
       )}
       
-      <main className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full">
+      <main className="flex-1 px-3 sm:px-6 py-3 sm:py-6 max-w-7xl mx-auto w-full pb-24 sm:pb-10">
         {activeItem ? (
           <VideoPlayer 
             movie={activeItem} 
@@ -136,7 +179,18 @@ function App() {
             t={t} 
           />
         ) : (
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-4 sm:gap-6">
+            {/* Cinematic Featured Billboard Hero (visible on main feeds when not searching) */}
+            {!searchQuery && activeTab !== 'history' && activeTab !== 'channels' && items.length > 0 && (
+              <FeaturedHero 
+                movies={items} 
+                onPlay={handlePlayItem} 
+                onSelectChannel={(ch) => setSelectedChannel(ch)} 
+                uiLang={uiLang} 
+                t={t} 
+              />
+            )}
+
             {/* YouTube-style Horizontal Channels Filter Bar */}
             {activeTab !== 'history' && (
               <ChannelsBar 
@@ -194,13 +248,13 @@ function App() {
             ) : (
               <>
                 {/* Header / Title */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 flex-wrap">
                     {activeTab === 'movies' && <Film className="text-red-500" size={24} />}
                     {activeTab === 'series' && <Tv className="text-emerald-400" size={24} />}
                     {activeTab === 'anime' && <Sparkles className="text-purple-400" size={24} />}
                     {activeTab === 'history' && <Clock className="text-blue-400" size={24} />}
-                    <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
+                    <h2 className="text-lg sm:text-2xl font-bold tracking-tight">
                       {activeTab === 'history' 
                         ? t.watchHistoryTitle 
                         : searchQuery 
@@ -213,6 +267,11 @@ function App() {
                                 ? t.popularAnime 
                                 : t.latestAndRecommended}
                     </h2>
+                    {!loading && items.length > 0 && (
+                      <span className="text-[11px] bg-white/10 text-gray-300 font-bold px-2 py-0.5 rounded-full border border-white/10">
+                        {items.length}
+                      </span>
+                    )}
                   </div>
 
                   {activeTab === 'history' && watchHistory.length > 0 && (
@@ -240,7 +299,7 @@ function App() {
                     )}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-5">
                     {items.map(item => (
                       <MovieCard 
                         key={item.id} 
@@ -261,7 +320,7 @@ function App() {
 
       {/* Footer with Developer Link */}
       {!activeItem && !selectedChannel && (
-        <footer className="border-t border-[#222222] bg-[#0c0c0c] py-6 px-4 text-center text-xs text-gray-500 mt-auto flex flex-col items-center gap-2">
+        <footer className="border-t border-white/5 bg-[#08080a] py-6 px-4 text-center text-xs text-gray-500 mt-auto flex flex-col items-center gap-2 mb-16 sm:mb-0">
           <p className="font-bold text-gray-300 text-sm tracking-wide">{t.footerTitle}</p>
           <p className="text-gray-400 max-w-xl">{t.footerDesc}</p>
           <div className="flex items-center gap-1.5 mt-2 text-gray-400">
@@ -276,6 +335,19 @@ function App() {
             </a>
           </div>
         </footer>
+      )}
+
+      {/* Mobile-First Bottom Navigation Bar */}
+      {!activeItem && (
+        <BottomNav 
+          activeTab={activeTab} 
+          setActiveTab={(tab) => {
+            setSelectedChannel(null);
+            setActiveTab(tab);
+          }} 
+          onSelectChannel={setSelectedChannel} 
+          t={t} 
+        />
       )}
     </div>
   );
